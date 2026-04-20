@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微信文章预览 - [文章标题]</title>
+  <style>
+    /* ===== 预览外壳样式（不会进入公众号，可自由使用 flex/grid） ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f2f2f2; padding-top: 60px; font-family: -apple-system, sans-serif; }
+
+    #preview-toolbar {
+      position: fixed; top: 0; left: 0; right: 0; height: 52px;
+      background: #fff; border-bottom: 1px solid #e8e8e8;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; z-index: 9999; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .toolbar-left { display: flex; align-items: center; gap: 12px; }
+    .toolbar-modes { display: flex; gap: 4px; }
+    .mode-btn {
+      padding: 6px 14px; border: 1px solid #e0e0e0; border-radius: 20px;
+      background: #fff; font-size: 13px; cursor: pointer; color: #555;
+    }
+    .mode-btn.active { background: #07c160; border-color: #07c160; color: #fff; }
+    .style-label { font-size: 12px; color: #999; }
+
+    .toolbar-right { display: flex; align-items: center; gap: 8px; }
+    #copy-btn {
+      padding: 7px 18px; background: #07c160; color: #fff;
+      border: none; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;
+    }
+    #copy-btn.copied { background: #4caf50; }
+
+    #preview-wrap {
+      display: flex; justify-content: center;
+      padding: 24px 16px 48px; min-height: 100vh;
+    }
+    #preview-container { width: 100%; max-width: 677px; background: transparent; }
+    #preview-container.mobile { max-width: 390px; }
+    #article-content { background: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- 工具栏（预览专用，不进入公众号） -->
+  <div id="preview-toolbar">
+    <div class="toolbar-left">
+      <div class="toolbar-modes">
+        <button class="mode-btn active" onclick="setMode('pc')" id="btn-pc">🖥 网页</button>
+        <button class="mode-btn" onclick="setMode('mobile')" id="btn-mobile">📱 手机</button>
+      </div>
+      <span class="style-label" id="style-label">[风格名称]</span>
+    </div>
+    <div class="toolbar-right">
+      <button id="copy-btn" onclick="copyArticle()">📋 复制到公众号</button>
+    </div>
+  </div>
+
+  <!-- 预览区域 -->
+  <div id="preview-wrap">
+    <div id="preview-container">
+      <!-- ↓↓↓ 文章内容：这部分才是要粘贴到微信公众号的内容 ↓↓↓ -->
+      <div id="article-content">
+        [在此放置文章 HTML，全部使用内联样式]
+      </div>
+      <!-- ↑↑↑ 文章内容结束 ↑↑↑ -->
+    </div>
+  </div>
+
+  <script>
+    function setMode(mode) {
+      const container = document.getElementById('preview-container');
+      document.getElementById('btn-pc').classList.toggle('active', mode === 'pc');
+      document.getElementById('btn-mobile').classList.toggle('active', mode === 'mobile');
+      container.classList.toggle('mobile', mode === 'mobile');
+    }
+
+    async function copyArticle() {
+      const btn = document.getElementById('copy-btn');
+      const content = document.getElementById('article-content');
+      const clone = content.cloneNode(true);
+
+      // 替换本地图片为等比占位图，避免微信编辑器无法识别本地路径
+      clone.querySelectorAll('img').forEach(img => {
+        const src = img.getAttribute('src') || '';
+        if (src.startsWith('file://') || src.startsWith('/') || src.startsWith('./') || src.startsWith('../')) {
+          const fileName = src.split('/').pop().split('?')[0] || '本地配图';
+          const w = img.clientWidth || img.width || 600;
+          const h = img.clientHeight || img.height || 400;
+          img.src = `https://iph.href.lu/${w}x${h}?text=${encodeURIComponent(fileName)}`;
+          img.removeAttribute('srcset');
+        }
+      });
+
+      const html = clone.innerHTML;
+      const originalText = btn.textContent;
+
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) })
+        ]);
+      } catch (e) {
+        // 降级方案：execCommand（兼容旧版浏览器）
+        const el = document.createElement('div');
+        el.setAttribute('contenteditable', 'true');
+        el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+        el.innerHTML = html;
+        document.body.appendChild(el);
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('copy');
+        sel.removeAllRanges();
+        document.body.removeChild(el);
+      }
+
+      btn.textContent = '✓ 已复制！';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = originalText; btn.classList.remove('copied'); }, 1500);
+    }
+  </script>
+</body>
+</html>
